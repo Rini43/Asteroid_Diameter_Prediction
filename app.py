@@ -29,30 +29,65 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_resource
-def load_model_and_scaler():
-    """
-    Load the trained DNN model and scaler.
-    """
-    try:
-        model_path = 'models/asteroid_diameter_dnn_model.h5'
-        scaler_path = 'models/scaler.pkl'
-        features_path = 'models/feature_columns.pkl'
-        
-        if not all([os.path.exists(p) for p in [model_path, scaler_path, features_path]]):
-            st.error("❌ Model files not found. Please train the model first by running `python train_model.py`")
-            st.stop()
-        
-        model = keras.models.load_model(model_path)
-        scaler = joblib.load(scaler_path)
-        feature_cols = joblib.load(features_path)
-        
-        return model, scaler, feature_cols
-    except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
-        st.stop()
+# PATHS
 
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_DIR = BASE_DIR / "models"
+
+MODEL_PATH = MODEL_DIR / "asteroid_diameter_model.keras"
+IMPUTER_PATH = MODEL_DIR / "asteroid_imputer.pkl"
+SCALER_PATH = MODEL_DIR / "asteroid_scaler.pkl"
+FEATURES_PATH = MODEL_DIR / "asteroid_features.pkl"
+
+# LOAD MODEL AND PREPROCESSING OBJECTS
+
+@st.cache_resource
+def load_artifacts():
+
+    model = keras.models.load_model(MODEL_PATH)
+    imputer = joblib.load(IMPUTER_PATH)
+    scaler = joblib.load(SCALER_PATH)
+    features = joblib.load(FEATURES_PATH)
+
+    return model, imputer, scaler, features
+
+# CHECK MODEL FILES
+
+required_files = [MODEL_PATH, IMPUTER_PATH,
+    SCALER_PATH, FEATURES_PATH]
+
+missing_files = [str(file.name)
+    for file in required_files
+    if not file.exists()]
+
+if missing_files:
+
+    st.error("Required model files are missing.")
+    st.write("Missing files:")
+
+    for file in missing_files:
+        st.write(f"- `{file}`")
+
+    st.info(
+        "Make sure the `models` folder is in the same directory "
+        "as app.py.")
+
+    st.stop()
+
+# LOAD ARTIFACTS
+
+try:
+
+    model, imputer, scaler, feature_names = load_artifacts()
+
+except Exception as e:
+
+    st.error("Could not load the trained model.")
+    st.exception(e)
+    st.stop()
+    
 def get_feature_descriptions():
+    
     """
     Return descriptions of orbital and physical properties.
     """
@@ -81,238 +116,315 @@ def get_feature_descriptions():
     }
     return descriptions
 
-def create_input_section():
+# HEADER
+
+st.title("☄️ Asteroid Diameter Prediction")
+
+st.markdown(
     """
-    Create input section for user to enter asteroid properties.
+    ### AI-powered asteroid diameter estimation
+
+    Enter the available astronomical and orbital parameters
+    below to estimate the asteroid's diameter in **kilometers**.
     """
-    st.subheader("📊 Enter Asteroid Properties")
-    
-    # Two-column layout
-    col1, col2 = st.columns(2)
-    
-    descriptions = get_feature_descriptions()
-    input_values = {}
-    
-    # Note: This is a simplified version. In practice, you'd want to match
-    # the exact features your model was trained on.
+)
+
+st.divider()
+
+# INFORMATION
+
+with st.expander("ℹ️ About this application"):
+
+    st.write(
+        """
+        This application uses a trained Deep Neural Network (DNN)
+        to estimate asteroid diameter.
+
+        The model was trained using astronomical and orbital
+        parameters after preprocessing with:
+
+        - Median imputation
+        - StandardScaler
+        - One-hot encoding
+        - Deep Neural Network regression
+
+        The prediction should be considered an estimate and not
+        a direct astronomical measurement.
+        """)
+
+# DEFAULT VALUES
+
+# The notebook trains the model with the features saved in
+# asteroid_features.pkl.
+
+# We create an input dictionary containing every expected feature.
+# Missing values can safely be handled by the trained imputer.
+
+input_data = {feature: np.nan for feature in feature_names}
+
+# SIDEBAR
+
+st.sidebar.header("Asteroid Parameters")
+st.sidebar.caption(
+    "Enter the values available for your asteroid.")
+
+# IMPORTANT FEATURES
+
+st.sidebar.subheader("Physical / Main Parameters")
+
+if "H" in input_data:
+
+    input_data["H"] = st.sidebar.number_input(
+        "Absolute Magnitude (H)",
+        min_value=-10.0, max_value=40.0,
+        value=15.0, step=0.1,
+        help="Absolute magnitude of the asteroid.")
+
+if "a" in input_data:
+
+    input_data["a"] = st.sidebar.number_input(
+        "Semi-major axis (a)",
+        min_value=0.01, max_value=100.0,
+        value=2.5, step=0.01,
+        help="Semi-major axis in astronomical units.")
+
+if "e" in input_data:
+
+    input_data["e"] = st.sidebar.number_input(
+        "Eccentricity (e)",
+        min_value=0.0, max_value=0.99,
+        value=0.1, step=0.01)
+
+if "i" in input_data:
+
+    input_data["i"] = st.sidebar.number_input(
+        "Inclination (i)",
+        min_value=0.0, max_value=180.0,
+        value=5.0, step=0.1)
+
+if "q" in input_data:
+
+    input_data["q"] = st.sidebar.number_input(
+        "Perihelion distance (q)",
+        min_value=0.0, max_value=100.0,
+        value=2.0, step=0.01)
+
+if "ad" in input_data:
+
+    input_data["ad"] = st.sidebar.number_input(
+        "Aphelion distance (ad)",
+        min_value=0.0, max_value=200.0,
+        value=3.0, step=0.01)
+
+if "moid" in input_data:
+
+    input_data["moid"] = st.sidebar.number_input(
+        "MOID", min_value=0.0,
+        max_value=100.0, value=1.0, step=0.01)
+
+# ORBITAL PARAMETERS
+
+with st.expander("🛰️ Orbital Parameters"):
+
     orbital_features = [
-        'a', 'e', 'i', 'Omega', 'w', 'ma', 'ad', 'per', 'n', 'tp'
-    ]
-    
-    physical_features = [
-        'H', 'sigma_a', 'sigma_e', 'sigma_i', 'sigma_om', 'sigma_w',
-        'sigma_ma', 'sigma_ad', 'sigma_n', 'sigma_tp', 'sigma_per'
-    ]
-    
-    with col1:
-        st.markdown("### Orbital Properties")
-        for feature in orbital_features:
-            if feature in descriptions:
-                help_text = descriptions[feature]
-                input_values[feature] = st.number_input(
-                    f"{feature}",
-                    value=1.0,
-                    help=help_text,
-                    key=f"input_{feature}"
-                )
-    
-    with col2:
-        st.markdown("### Physical Properties")
-        for feature in physical_features:
-            if feature in descriptions:
-                help_text = descriptions[feature]
-                input_values[feature] = st.number_input(
-                    f"{feature}",
-                    value=0.1,
-                    help=help_text,
-                    key=f"input_{feature}"
-                )
-    
-    return input_values
+        "epoch", "epoch_mjd", "tp", "tp_cal",
+        "per", "per_y", "ma", "maia", "n", "om",
+        "w", "sigma_e", "sigma_a", "sigma_q","sigma_i",
+        "sigma_om", "sigma_w", "sigma_ma", "sigma_ad",
+        "sigma_n", "sigma_tp", "sigma_per",]
 
-def make_prediction(model, scaler, feature_cols, input_values):
-    """
-    Make prediction using the trained model.
-    """
+    available_orbital_features = [
+        feature
+        for feature in orbital_features
+        if feature in input_data]
+
+    cols = st.columns(3)
+
+    for index, feature in enumerate(available_orbital_features):
+
+        with cols[index % 3]:
+
+            input_data[feature] = st.number_input(
+                feature, value=0.0, format="%.6f",
+                key=f"orbital_{feature}")
+
+# OBSERVATIONAL PARAMETERS
+
+with st.expander("🔭 Observation Parameters"):
+
+    observation_features = [
+        "data_arc", "n_obs_used", "n_del_obs_used",
+        "n_dop_obs_used", "rms", "condition_code",
+        "epoch_mjd"]
+
+    available_observation_features = [
+        feature
+        for feature in observation_features
+        if feature in input_data]
+
+    cols = st.columns(3)
+
+    for index, feature in enumerate(available_observation_features):
+
+        with cols[index % 3]:
+
+            input_data[feature] = st.number_input(
+                feature, value=0.0, format="%.6f",
+                key=f"observation_{feature}")
+
+# NEO / PHA
+
+with st.expander("🌍 Classification"):
+
+    if "neo" in input_data:
+
+        neo_value = st.selectbox(
+            "Near-Earth Object (NEO)",
+            ["No", "Yes"])
+
+        input_data["neo"] = 1 if neo_value == "Yes" else 0
+
+    if "pha" in input_data:
+
+        pha_value = st.selectbox(
+            "Potentially Hazardous Asteroid (PHA)",
+            ["No", "Yes"])
+
+        input_data["pha"] = 1 if pha_value == "Yes" else 0
+
+# CLASS FEATURES
+
+class_features = [
+    feature
+    for feature in feature_names
+    if feature.startswith("class_")]
+
+if class_features:
+
+    with st.expander("🔬 Asteroid Class"):
+
+        selected_class = st.selectbox(
+            "Class",
+            ["Default"] + class_features)
+
+        # One-hot encoding equivalent to the notebook:
+        # pd.get_dummies(..., drop_first=True)
+
+        for feature in class_features:
+
+            input_data[feature] = (
+                1 if feature == selected_class else 0)
+
+# PREDICTION
+
+st.divider()
+st.subheader("🔮 Prediction")
+
+if st.button(
+    "☄️ Predict Asteroid Diameter",
+    type="primary",
+    use_container_width=True):
+
     try:
-        # Create input array with exact feature order
-        input_array = np.array([input_values.get(feature, 0.0) for feature in feature_cols])
-        
-        # Scale input
-        input_scaled = scaler.transform(input_array.reshape(1, -1))
-        
-        # Make prediction
-        prediction = model.predict(input_scaled, verbose=0)
-        predicted_diameter = prediction[0][0]
-        
-        return predicted_diameter
+
+        # Create dataframe
+
+        input_df = pd.DataFrame([input_data])
+
+        # IMPORTANT:
+        # Force exact feature order used during training.
+
+        input_df = input_df.reindex(
+            columns=feature_names)
+
+        # Convert everything to numeric
+
+        input_df = input_df.apply(
+            pd.to_numeric,
+            errors="coerce")
+
+        # Imputation
+
+        input_imputed = imputer.transform(
+            input_df)
+
+        # Scaling
+
+        input_scaled = scaler.transform(
+            input_imputed)
+
+        # Prediction
+
+        prediction = model.predict(
+            input_scaled, verbose=0)
+
+        diameter = float(
+            np.asarray(prediction).reshape(-1)[0])
+
+        # Safety check
+
+        if not np.isfinite(diameter):
+
+            st.error(
+                "The model returned an invalid prediction.")
+
+        else:
+
+            # Diameter cannot physically be negative.
+            diameter = max(0.0, diameter)
+
+            st.success(
+                "Prediction completed successfully!")
+
+            # RESULT
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+
+                st.metric("Predicted Diameter",
+                    f"{diameter:.3f} km")
+
+            with col2:
+
+                st.metric("Predicted Diameter",
+                    f"{diameter * 1000:.1f} m")
+
+            with col3:
+
+                st.metric("Model Input Features",
+                    len(feature_names))
+
+            # Interpretation
+
+            st.info(
+                f"""
+                The trained DNN estimates the asteroid diameter
+                at approximately **{diameter:.3f} km**.
+
+                This is an ML-based estimate and should not be
+                treated as a direct astronomical measurement.
+                """
+            )
+
+            # Show processed input
+
+            with st.expander("🔍 View model input"):
+
+                display_df = input_df.T
+                display_df.columns = ["Value"]
+
+                st.dataframe(display_df, use_container_width=True)
+
     except Exception as e:
-        st.error(f"Error making prediction: {str(e)}")
-        return None
 
-def display_results(diameter):
-    """
-    Display prediction results with visualization.
-    """
-    st.subheader("🎯 Prediction Result")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric(
-            label="Predicted Diameter (km)",
-            value=f"{diameter:.2f}",
-            delta=None
-        )
-    
-    with col2:
-        # Radius in km
-        radius = diameter / 2
-        st.metric(
-            label="Estimated Radius (km)",
-            value=f"{radius:.2f}"
-        )
-    
-    with col3:
-        # Volume estimate (assuming sphere)
-        volume = (4/3) * np.pi * (radius ** 3)
-        st.metric(
-            label="Estimated Volume (km³)",
-            value=f"{volume:.2e}"
-        )
-    
-    # Size comparison
-    st.markdown("---")
-    st.subheader("📏 Size Comparison")
-    
-    comparisons = {
-        "Moon": 3474,
-        "Mt. Everest (base)": 0.01,
-        "Chicxulub Crater (asteroid)": 10,
-        "Ceres (dwarf planet)": 946
-    }
-    
-    comparison_data = []
-    for name, size in comparisons.items():
-        ratio = diameter / size if size > 0 else 0
-        comparison_data.append({
-            "Object": name,
-            "Diameter (km)": size,
-            "Ratio to Prediction": f"{ratio:.2f}x"
-        })
-    
-    comparison_df = pd.DataFrame(comparison_data)
-    st.table(comparison_df)
+        st.error("Prediction failed.")
+        st.exception(e)
 
-def main():
-    # Header
-    st.title("🌍 Asteroid Diameter Predictor")
-    st.markdown("""
-    This application uses a Deep Neural Network (DNN) trained on asteroid orbital and physical properties
-    to predict asteroid diameter. The model learns patterns from real astronomical data to make accurate predictions.
-    """)
-    
-    st.markdown("---")
-    
-    # Load model and scaler
-    with st.spinner("Loading model..."):
-        model, scaler, feature_cols = load_model_and_scaler()
-    
-    st.success("✅ Model loaded successfully!")
-    
-    # Create tabs
-    tab1, tab2, tab3 = st.tabs(["🔮 Predictor", "📖 About", "⚙️ Model Info"])
-    
-    with tab1:
-        # Input section
-        input_values = create_input_section()
-        
-        # Prediction button
-        col1, col2 = st.columns([2, 1])
-        with col2:
-            predict_button = st.button("🚀 Predict Diameter", use_container_width=True)
-        
-        if predict_button:
-            with st.spinner("Making prediction..."):
-                diameter = make_prediction(model, scaler, feature_cols, input_values)
+# FOOTER
+
+st.divider()
+st.caption("Asteroid Diameter Prediction • Deep Learning Regression")
+
+
             
-            if diameter is not None and diameter > 0:
-                display_results(diameter)
-                
-                # Additional insights
-                st.markdown("---")
-                st.subheader("💡 Insights")
-                
-                if diameter < 1:
-                    st.info("This is a very small asteroid, likely a meteoroid.")
-                elif diameter < 10:
-                    st.info("This is a small asteroid, similar in size to a city block.")
-                elif diameter < 100:
-                    st.info("This is a medium-sized asteroid, capable of causing significant damage if it impacted Earth.")
-                elif diameter < 500:
-                    st.info("This is a large asteroid, similar in size to a major city.")
-                else:
-                    st.warning("This is a very large asteroid, similar in size to a dwarf planet!")
-            else:
-                st.error("Prediction failed. Please check your inputs.")
-    
-    with tab2:
-        st.subheader("About This Application")
-        st.markdown("""
-        ### 🔬 Model Details
-        
-        This application uses a **Deep Neural Network (DNN)** to predict asteroid diameter based on:
-        - **Orbital Properties**: Semi-major axis, eccentricity, inclination, etc.
-        - **Physical Properties**: Absolute magnitude and orbital uncertainties
-        
-        ### 🎯 Target Variable
-        - **Diameter**: The physical diameter of the asteroid in kilometers
-        
-        ### 📊 Model Architecture
-        The DNN consists of:
-        - 128 neurons (ReLU) → Dropout(0.2)
-        - 64 neurons (ReLU) → Dropout(0.2)
-        - 32 neurons (ReLU) → Dropout(0.1)
-        - 16 neurons (ReLU)
-        - 1 output neuron (Linear - for regression)
-        
-        ### 📚 Training Details
-        - Optimizer: Adam
-        - Loss Function: Mean Squared Error (MSE)
-        - Early Stopping: Prevents overfitting
-        - Feature Scaling: StandardScaler normalization
-        """)
-    
-    with tab3:
-        st.subheader("Model Performance & Information")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            ### Features Used
-            The model uses the following features for prediction:
-            """)
-            features_df = pd.DataFrame({
-                "Feature": feature_cols[:len(feature_cols)//2]
-            })
-            st.dataframe(features_df, use_container_width=True)
-        
-        with col2:
-            st.markdown("&nbsp;")
-            features_df2 = pd.DataFrame({
-                "Feature": feature_cols[len(feature_cols)//2:]
-            })
-            st.dataframe(features_df2, use_container_width=True)
-        
-        st.markdown("---")
-        st.info("""
-        📌 **To view detailed model performance metrics**, run the training script:
-        ```bash
-        python train_model.py
-        ```
-        This will display MSE, RMSE, MAE, and R² scores on the test set.
-        """)
-
-if __name__ == "__main__":
-    main()
