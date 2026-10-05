@@ -22,7 +22,7 @@ MODEL_DIR = "models"
 
 MODEL_PATH = os.path.join(
     MODEL_DIR,
-    "asteroid_diameter_model.keras"
+    "asteroid_diameter_model.h5"
 )
 
 IMPUTER_PATH = os.path.join(
@@ -416,6 +416,6 @@ def main():
     print(f"RMSE: {metrics['test_rmse']:.4f} km")
     print(f"MAE : {metrics['test_mae']:.4f} km")
     print(f"R²  : {metrics['test_r2']:.4f}")
-    
+
 if __name__ == "__main__":
     main()

@@ -34,7 +34,7 @@ st.markdown("""
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = BASE_DIR / "models"
 
-MODEL_PATH = MODEL_DIR / "asteroid_diameter_model.keras"
+MODEL_PATH = MODEL_DIR / "asteroid_diameter_model.h5"
 IMPUTER_PATH = MODEL_DIR / "asteroid_imputer.pkl"
 SCALER_PATH = MODEL_DIR / "asteroid_scaler.pkl"
 FEATURES_PATH = MODEL_DIR / "asteroid_features.pkl"
