@@ -85,6 +85,12 @@ streamlit run app.py
 
 The app will open in your browser at `http://localhost:8501`
 
+## 🚀 Live Demo
+
+Try the deployed application here:
+
+👉 [Asteroid Diameter Prediction - Live Demo](https://asteroiddiameterprediction.streamlit.app/)
+
 ## Project Structure
 
 ```
