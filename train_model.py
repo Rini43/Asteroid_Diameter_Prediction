@@ -267,69 +267,70 @@ def evaluate_model(
 # Main
 
 def main():
-
     print("\n")
     print("=" * 70)
     print("ASTEROID DIAMETER PREDICTION")
     print("=" * 70)
 
     # Create models directory if it doesn't exist
-
     os.makedirs(MODEL_DIR, exist_ok=True)
-    if not os.path.exists(filepath):
-        print(f"Error: Dataset not found at {filepath}")
+
+    # Check if dataset exists
+    if not os.path.exists(DATA_PATH):
+        print(f"Error: Dataset not found at {DATA_PATH}")
         print("Please provide the asteroid dataset CSV file.")
         return
-    
-    # Load and prepare data
-    
-    df = load_data(DATA_PATH)
 
-    # Preprocess
+    # Load data
+    df = load_and_prepare_data(DATA_PATH)
 
-    X, y = preprocess_data(df)
+    # Preprocess data
+    X, y = select_features(df)
 
     # Train/test split
-
     print("\n" + "=" * 70)
     print("TRAIN / TEST SPLIT")
     print("=" * 70)
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.20, random_state=42)
+        X,
+        y,
+        test_size=0.20,
+        random_state=42
+    )
 
     print(f"Training samples: {X_train.shape}")
     print(f"Testing samples : {X_test.shape}")
 
     # Median imputation
-
     print("\nApplying median imputation...")
 
     numeric_cols = X_train.select_dtypes(
         include=[np.number]
     ).columns
 
-    imputer = SimpleImputer(
-        strategy="median")
+    imputer = SimpleImputer(strategy="median")
 
     X_train[numeric_cols] = imputer.fit_transform(
-        X_train[numeric_cols])
+        X_train[numeric_cols]
+    )
 
     X_test[numeric_cols] = imputer.transform(
-        X_test[numeric_cols])
+        X_test[numeric_cols]
+    )
 
     # Verify missing values
-
     print(
         "Missing values in training:",
-        X_train.isna().sum().sum())
+        X_train.isna().sum().sum()
+    )
 
     print(
         "Missing values in testing :",
-        X_test.isna().sum().sum())
+        X_test.isna().sum().sum()
+    )
 
     # Scale features
-    
     print("\nScaling features...")
 
     scaler = StandardScaler()
@@ -338,7 +339,6 @@ def main():
     X_test_scaled = scaler.transform(X_test)
 
     # Save preprocessing objects
-
     joblib.dump(imputer, IMPUTER_PATH)
     joblib.dump(scaler, SCALER_PATH)
     joblib.dump(X_train.columns.tolist(), FEATURES_PATH)
@@ -348,58 +348,52 @@ def main():
     print(f"Features saved: {FEATURES_PATH}")
 
     # Build model
-
-    model = build_model(
-        X_train_scaled.shape[1])
+    model = build_dnn_model(
+        X_train_scaled.shape[1]
+    )
 
     # Callbacks
-    # Early stopping to prevent overfitting
-
     early_stop = EarlyStopping(
         monitor="val_loss",
         patience=10,
-        restore_best_weights=True)
+        restore_best_weights=True
+    )
 
-    reduce_lr = ReduceLROnPlateau(monitor="val_loss",
-        factor=0.5, patience=5, min_lr=1e-6)
+    reduce_lr = ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=0.5,
+        patience=5,
+        min_lr=1e-6
+    )
 
-    # Train
-    
-    """
-    Train the DNN model.
-    """
+    # Train model
     print("\nTraining model...")
 
     history = model.fit(
-
-        # IMPORTANT:
-        # Train using SCALED data.
-        
         X_train_scaled,
         y_train,
         validation_split=0.20,
         epochs=50,
         batch_size=256,
-
-        callbacks=[early_stop,
-            reduce_lr],
-        verbose=1)
+        callbacks=[
+            early_stop,
+            reduce_lr
+        ],
+        verbose=1
+    )
 
     print("\nTraining completed!")
 
-    # Evaluate
-    
-    """
-    Evaluate model performance.
-    """
-
-    metrics = evaluate_model(model,
-                             X_train_scaled,
-                             y_train, X_test_scaled,
-                             y_test)
+    # Evaluate model
+    metrics = evaluate_model(
+        model,
+        X_train_scaled,
+        y_train,
+        X_test_scaled,
+        y_test
+    )
 
     # Save model
-
     print("\n" + "=" * 70)
     print("SAVE MODEL")
     print("=" * 70)
@@ -413,17 +407,15 @@ def main():
     print("=" * 70)
 
     print("\nSaved files:")
-
     print(f"1. {MODEL_PATH}")
     print(f"2. {IMPUTER_PATH}")
     print(f"3. {SCALER_PATH}")
     print(f"4. {FEATURES_PATH}")
+
     print("\nFinal Test Metrics:")
     print(f"RMSE: {metrics['test_rmse']:.4f} km")
     print(f"MAE : {metrics['test_mae']:.4f} km")
     print(f"R²  : {metrics['test_r2']:.4f}")
-
-# Entry point
-
+    
 if __name__ == "__main__":
     main()
